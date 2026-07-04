@@ -25,6 +25,9 @@ class RawResult(TypedDict, total=False):
     text: str
     confidence: float
     probabilities: ProbMatrix  # [T][1][V]
+    # Optional fast path: a numpy [T, V] array of probabilities. When present the
+    # beam decoder consumes it directly, skipping nested-list materialization.
+    probs_np: object
     charset: list[str]  # index -> character; index of the blank is ``blank_index``
 
 
