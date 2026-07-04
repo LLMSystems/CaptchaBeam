@@ -1,6 +1,14 @@
+<div align="center">
+
 # CaptchaBeam
 
 **Customizable restricted CTC beam-search decoding and OpenCV preprocessing variants for fixed-format captcha OCR.**
+
+[English](README.md) · [中文](README_zh-CN.md)
+
+</div>
+
+---
 
 Pipeline: **multi-variant OpenCV preprocessing → OCR probability matrix →
 restricted CTC beam search → agreement voting across variants.** It took a real
