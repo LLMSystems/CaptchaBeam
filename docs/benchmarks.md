@@ -123,3 +123,11 @@ with a few retries.
 
 Reproduce any table above with `scripts/benchmark.py [--fast] [--gpu]` or
 `captchabeam eval --data data/...`.
+
+---
+
+## Pushing past 85%?
+
+See [experiments.md](experiments.md) for what was tried to beat 85.0% exact
+(a second ddddocr model, ensembling, per-position voting, easyocr) and why none
+of it worked — the remaining errors are correlated ambiguous glyphs.
