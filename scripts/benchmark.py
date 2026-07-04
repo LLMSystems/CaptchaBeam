@@ -26,17 +26,17 @@ TIERS = [
 ]
 
 
-def run(dirs, limit, use_gpu=False, batched=False):
+def run(dirs, limit, use_gpu=False, fast=False):
     items = load_datasets(dirs)
     if limit:
         items = items[:limit]
     device = "GPU" if use_gpu else "CPU"
-    mode = "batched" if batched else "per-variant"
+    mode = "fast" if fast else "per-variant"
     # One shared backend so the model loads once; CaptchaBeam is stateless per call.
-    if batched:
-        from captchabeam.backends import BatchedDdddOcrBackend
+    if fast:
+        from captchabeam.backends import FastDdddOcrBackend
 
-        backend = BatchedDdddOcrBackend(use_gpu=use_gpu)
+        backend = FastDdddOcrBackend(use_gpu=use_gpu)
     elif use_gpu:
         backend = DdddOcrBackend(use_gpu=use_gpu)
     else:
@@ -64,9 +64,9 @@ def main():
     ap.add_argument("--dirs", nargs="+", type=Path, default=DEFAULT_DIRS)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--gpu", action="store_true", help="use onnxruntime-gpu backend")
-    ap.add_argument("--batched", action="store_true", help="batch all variants per image")
+    ap.add_argument("--fast", action="store_true", help="fast backend (array input + numpy decode)")
     args = ap.parse_args()
-    run(args.dirs, args.limit, use_gpu=args.gpu, batched=args.batched)
+    run(args.dirs, args.limit, use_gpu=args.gpu, fast=args.fast)
 
 
 if __name__ == "__main__":

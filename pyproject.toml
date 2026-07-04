@@ -19,8 +19,8 @@ ddddocr = ["ddddocr"]
 # GPU is generally slower for this single-image workload; see README. Needs a
 # matching CUDA/cuDNN runtime available at load time.
 gpu = ["onnxruntime-gpu"]
-# Batched backend: one padded session.run over all variants + numpy-native decode.
-batch = ["ddddocr", "opencv-python", "onnx"]
+# Fast backend: array input + numpy-native decode (no PNG roundtrip / nested lists).
+fast = ["ddddocr", "opencv-python"]
 eval = ["opencv-python", "ddddocr"]
 all = ["opencv-python", "ddddocr"]
 dev = ["opencv-python", "ddddocr", "pytest"]

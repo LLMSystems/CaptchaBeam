@@ -152,41 +152,46 @@ beam on failure.
 > images, sequentially — no batching. Per-call host↔device transfer and kernel
 > launch overhead outweighs the compute saved, so CUDA runs ~2× slower than CPU.
 > Preprocessing (OpenCV) and the beam-search loop also stay on CPU regardless.
-> **Recommendation: run this workload on CPU.** GPU only helps if you batch (see
-> below). To try it anyway: `DdddOcrBackend(use_gpu=True)` with `onnxruntime-gpu`
-> + a matching CUDA/cuDNN runtime on `LD_LIBRARY_PATH`, or
+> **Recommendation: run this workload on CPU.** Even batched, GPU stays slower
+> here (the model is tiny and the bottleneck is CPU-side decode, not OCR compute
+> — see the batching note below). To try GPU anyway: `DdddOcrBackend(use_gpu=True)`
+> with `onnxruntime-gpu` + a matching CUDA/cuDNN runtime on `LD_LIBRARY_PATH`, or
 > `scripts/benchmark.py --gpu`.
 
-### Batched inference (`BatchedDdddOcrBackend`)
+### Faster decoding (`FastDdddOcrBackend`)
 
-For lower single-image latency, the batched backend scores **all variants of an
-image in one padded `session.run`** (via a dynamic-batch re-export of ddddocr's
-model, generated and cached on first use) and hands the decoder **numpy
-probabilities directly** — skipping the per-timestep 8210-wide nested-list
-materialization and vectorizing the character aggregation.
+For lower single-image latency at **no accuracy cost**, the fast backend keeps
+ddddocr's original (static) recognition model but (1) takes numpy arrays directly
+— skipping the PNG encode/decode roundtrip — and (2) hands the decoder a numpy
+`[T, V]` probability matrix, so it skips materializing an 8210-wide nested list
+per timestep and vectorizes the character aggregation.
 
 ```python
 from captchabeam import CaptchaBeam
-from captchabeam.backends import BatchedDdddOcrBackend
+from captchabeam.backends import FastDdddOcrBackend
 
-cb = CaptchaBeam(backend=BatchedDdddOcrBackend(), variants=18, decoder="beam")
-cb.decode("captcha.png")                       # or BatchedDdddOcrBackend(use_gpu=True)
+cb = CaptchaBeam(backend=FastDdddOcrBackend(), variants=18, decoder="beam")
+cb.decode("captcha.png")
 ```
 
-18-variants-beam latency, 300-image holdout (`scripts/benchmark.py --batched [--gpu]`):
+18-variants-beam latency, 300-image holdout (`scripts/benchmark.py --fast`):
 
-| Mode | CPU ms/img | GPU ms/img | Exact |
-|------|-----------:|-----------:|------:|
-| per-variant (default) | 184.1 | 347.3 | **85.0%** |
-| batched | **113.1** | 175.3 | 84.0% |
+| Mode | CPU ms/img | Exact |
+|------|-----------:|------:|
+| per-variant (default) | 184.1 | 85.0% |
+| **fast** | **120.9** | **85.0%** |
 
-The win is almost entirely from dropping the nested-list conversion and
-vectorizing the decode; the batched OCR call itself matters little on CPU.
-**CPU batched (113 ms) is the fastest configuration** and still beats every GPU
-mode — this workload is CPU-favorable. Trade-off: the dynamic-batch re-export
-selects slightly different onnxruntime kernels (~1e-2 logit drift), costing about
-**1 point of exact accuracy** (85.0% → 84.0%). Use the default per-variant path
-when you want the last accuracy point; use batched when latency matters more.
+Same static model → **identical output** (verified char-for-char), ~34% faster.
+The gain is entirely from dropping the nested-list conversion and vectorizing the
+decode — the OCR compute is unchanged.
+
+> **A note on batching.** Batching all variants into one `session.run` (via a
+> dynamic-batch re-export of the model) was tried and **rejected**: ddddocr's
+> graph has an operation that assumes batch=1, so batching *different* images
+> leaks information across samples (~1.3 logit units) and corrupts results,
+> costing ~1 point of accuracy. It is also barely faster than the fast backend
+> on CPU, because the bottleneck was never the OCR compute. The fast backend
+> above delivers the speedup correctly.
 
 ### Retry success rate
 

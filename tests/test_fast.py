@@ -1,6 +1,8 @@
-"""Batched backend: numpy-native decode parity + aggregate-accuracy equivalence.
+"""Fast backend: numpy-native decode parity + accuracy equivalence.
 
-Skips cleanly without ddddocr / onnx / opencv / the migrated data.
+The fast backend uses ddddocr's original static model, so unlike a batched
+re-export it should match the default per-variant path essentially exactly.
+Skips cleanly without ddddocr / opencv / the migrated data.
 """
 from __future__ import annotations
 
@@ -10,11 +12,10 @@ import numpy as np
 import pytest
 
 pytest.importorskip("ddddocr")
-pytest.importorskip("onnx")
 pytest.importorskip("cv2")
 
 from captchabeam import CaptchaBeam, DecodeConfig, RestrictedCTCBeamDecoder  # noqa: E402
-from captchabeam.backends import BatchedDdddOcrBackend, DdddOcrBackend  # noqa: E402
+from captchabeam.backends import DdddOcrBackend, FastDdddOcrBackend  # noqa: E402
 from captchabeam.eval import load_labels  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "data" / "captcha_holdout_100"
@@ -38,18 +39,17 @@ def labeled():
     return items[:20]
 
 
-def test_batched_backend_runs_and_is_length_correct(labeled):
-    cb = CaptchaBeam(backend=BatchedDdddOcrBackend(), variants=18, decoder="beam")
+def test_fast_backend_length_and_charset(labeled):
+    cb = CaptchaBeam(backend=FastDdddOcrBackend(), variants=18, decoder="beam")
     for item in labeled:
         result = cb.decode(item.path)
         assert len(result.text) == 5
         assert set(result.text) <= set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
-def test_batched_matches_per_variant_on_most_images(labeled):
-    """Batched uses a dynamic-axis re-export whose kernels drift by ~1e-2 from the
-    static model, so a few characters can flip; the vast majority must still match."""
+def test_fast_matches_per_variant(labeled):
+    """Same static model as the default backend -> identical decoded text."""
     ref = CaptchaBeam(backend=DdddOcrBackend(), variants=18, decoder="beam")
-    bat = CaptchaBeam(backend=BatchedDdddOcrBackend(), variants=18, decoder="beam")
-    agree = sum(ref.decode(i.path).text == bat.decode(i.path).text for i in labeled)
-    assert agree >= len(labeled) - 2  # allow rare boundary/kernel-drift flips
+    fast = CaptchaBeam(backend=FastDdddOcrBackend(), variants=18, decoder="beam")
+    for item in labeled:
+        assert ref.decode(item.path).text == fast.decode(item.path).text
