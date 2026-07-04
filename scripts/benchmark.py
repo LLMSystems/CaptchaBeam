@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from captchabeam import CaptchaBeam
+from captchabeam.backends import DdddOcrBackend
 from captchabeam.eval import load_datasets, score
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,15 +26,18 @@ TIERS = [
 ]
 
 
-def run(dirs, limit):
+def run(dirs, limit, use_gpu=False):
     items = load_datasets(dirs)
     if limit:
         items = items[:limit]
-    print(f"samples={len(items)}\n")
+    device = "GPU" if use_gpu else "CPU"
+    # One shared backend so the model loads once; CaptchaBeam is stateless per call.
+    backend = DdddOcrBackend(use_gpu=use_gpu) if use_gpu else None
+    print(f"samples={len(items)} device={device}\n")
     print(f"{'tier':<26} {'exact':>7} {'char':>7} {'len_ok':>7} {'ms/img':>9}")
     print("-" * 62)
     for label, kwargs in TIERS:
-        cb = CaptchaBeam(**kwargs)
+        cb = CaptchaBeam(backend=backend, **kwargs)
         cb.decode(items[0].path)  # warm up (lazy model + first-call JIT)
         pairs = []
         t0 = time.perf_counter()
@@ -51,8 +55,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dirs", nargs="+", type=Path, default=DEFAULT_DIRS)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--gpu", action="store_true", help="use onnxruntime-gpu backend")
     args = ap.parse_args()
-    run(args.dirs, args.limit)
+    run(args.dirs, args.limit, use_gpu=args.gpu)
 
 
 if __name__ == "__main__":

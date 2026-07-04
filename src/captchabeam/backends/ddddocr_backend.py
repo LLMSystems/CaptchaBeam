@@ -10,14 +10,18 @@ from ..types import RawResult
 
 
 class DdddOcrBackend:
-    def __init__(self, show_ad: bool = False) -> None:
+    def __init__(
+        self, show_ad: bool = False, use_gpu: bool = False, device_id: int = 0
+    ) -> None:
         try:
             import ddddocr  # noqa: PLC0415
         except ImportError as exc:
             raise ImportError(
                 "The default backend requires ddddocr: pip install captchabeam[ddddocr]"
             ) from exc
-        self._ocr = ddddocr.DdddOcr(show_ad=show_ad)
+        # GPU requires onnxruntime-gpu with a matching CUDA/cuDNN runtime on
+        # LD_LIBRARY_PATH; ddddocr selects the CUDAExecutionProvider internally.
+        self._ocr = ddddocr.DdddOcr(show_ad=show_ad, use_gpu=use_gpu, device_id=device_id)
 
     def __call__(self, png: bytes) -> RawResult:
         return self._ocr.classification(png, probability=True)

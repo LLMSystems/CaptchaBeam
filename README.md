@@ -130,20 +130,32 @@ project's original numbers **exactly** — the accuracy columns are the output o
 
 ### Inference latency
 
-Measured with `scripts/benchmark.py` on the 300-image holdout set, CPU only
-(Intel i7-12700, onnxruntime 1.27 CPU, ddddocr 1.6.1). Latency is end-to-end
-per image: preprocessing + OCR over every variant + decode + selection.
+Measured with `scripts/benchmark.py` on the 300-image holdout set. Latency is
+end-to-end per image: preprocessing + OCR over every variant + decode +
+selection. Hardware: Intel i7-12700 (CPU) / NVIDIA RTX 3060 Ti (GPU),
+ddddocr 1.6.1, onnxruntime-gpu 1.22 (same build for both columns, so the only
+difference is CPU vs CUDA execution provider).
 
-| Tier | Exact | ms/image | Relative |
-|------|------:|---------:|---------:|
-| otsu native (1 variant) | 72.3% | **8.2** | 1× |
-| 6 variants native | 76.3% | 48.9 | ~6× |
-| 18 variants beam (default) | 85.0% | 186.6 | ~23× |
+| Tier | Exact | CPU ms/img | GPU ms/img | GPU vs CPU |
+|------|------:|-----------:|-----------:|-----------:|
+| otsu native (1 variant) | 72.3% | **8.2** | 12.7 | 1.5× slower |
+| 6 variants native | 76.3% | 45.6 | 98.3 | 2.2× slower |
+| 18 variants beam (default) | 85.0% | 184.1 | 347.3 | 1.9× slower |
 
 Latency scales roughly linearly with variant count (each variant is one OCR
 pass); the beam search adds a small amount on top of the OCR cost. Pick the tier
 that fits your latency budget — or use the fast tier first and only escalate to
 beam on failure.
+
+> **GPU is slower here, and that's expected.** The captcha model is tiny (~23
+> CTC timesteps) and CaptchaBeam calls it once per variant on single small
+> images, sequentially — no batching. Per-call host↔device transfer and kernel
+> launch overhead outweighs the compute saved, so CUDA runs ~2× slower than CPU.
+> Preprocessing (OpenCV) and the beam-search loop also stay on CPU regardless.
+> **Recommendation: run this workload on CPU.** GPU only helps if you batch many
+> images through a custom backend. To try it anyway:
+> `DdddOcrBackend(use_gpu=True)` with `onnxruntime-gpu` + a matching CUDA/cuDNN
+> runtime on `LD_LIBRARY_PATH`, or `scripts/benchmark.py --gpu`.
 
 ### Retry success rate
 

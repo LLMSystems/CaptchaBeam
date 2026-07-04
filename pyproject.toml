@@ -16,6 +16,9 @@ dependencies = ["numpy>=1.21"]
 [project.optional-dependencies]
 cv = ["opencv-python"]
 ddddocr = ["ddddocr"]
+# GPU is generally slower for this single-image workload; see README. Needs a
+# matching CUDA/cuDNN runtime available at load time.
+gpu = ["onnxruntime-gpu"]
 eval = ["opencv-python", "ddddocr"]
 all = ["opencv-python", "ddddocr"]
 dev = ["opencv-python", "ddddocr", "pytest"]
