@@ -77,12 +77,27 @@ class CaptchaBeam:
         return image
 
     def candidates(self, image: ImageInput) -> list[Candidate]:
-        """Run every variant and return one decoded candidate per variant."""
+        """Run every variant and return one decoded candidate per variant.
+
+        Uses a single batched OCR call when the backend supports ``run_batch``
+        (all variants scored in one inference); otherwise falls back to one OCR
+        call per variant.
+        """
         gray = to_gray(self._read_png(image))
+        backend = self.backend
+
+        if hasattr(backend, "run_batch"):
+            arrays = [variant.apply(gray) for variant in self.variants]
+            raws = backend.run_batch(arrays)
+            return [
+                Candidate(variant.name, *self._decoder.decode(raw))
+                for variant, raw in zip(self.variants, raws)
+            ]
+
         results: list[Candidate] = []
         for variant in self.variants:
             png = variant.to_png(gray)
-            raw = self.backend(png)
+            raw = backend(png)
             text, confidence = self._decoder.decode(raw)
             results.append(Candidate(variant.name, text, confidence))
         return results

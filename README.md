@@ -152,10 +152,41 @@ beam on failure.
 > images, sequentially — no batching. Per-call host↔device transfer and kernel
 > launch overhead outweighs the compute saved, so CUDA runs ~2× slower than CPU.
 > Preprocessing (OpenCV) and the beam-search loop also stay on CPU regardless.
-> **Recommendation: run this workload on CPU.** GPU only helps if you batch many
-> images through a custom backend. To try it anyway:
-> `DdddOcrBackend(use_gpu=True)` with `onnxruntime-gpu` + a matching CUDA/cuDNN
-> runtime on `LD_LIBRARY_PATH`, or `scripts/benchmark.py --gpu`.
+> **Recommendation: run this workload on CPU.** GPU only helps if you batch (see
+> below). To try it anyway: `DdddOcrBackend(use_gpu=True)` with `onnxruntime-gpu`
+> + a matching CUDA/cuDNN runtime on `LD_LIBRARY_PATH`, or
+> `scripts/benchmark.py --gpu`.
+
+### Batched inference (`BatchedDdddOcrBackend`)
+
+For lower single-image latency, the batched backend scores **all variants of an
+image in one padded `session.run`** (via a dynamic-batch re-export of ddddocr's
+model, generated and cached on first use) and hands the decoder **numpy
+probabilities directly** — skipping the per-timestep 8210-wide nested-list
+materialization and vectorizing the character aggregation.
+
+```python
+from captchabeam import CaptchaBeam
+from captchabeam.backends import BatchedDdddOcrBackend
+
+cb = CaptchaBeam(backend=BatchedDdddOcrBackend(), variants=18, decoder="beam")
+cb.decode("captcha.png")                       # or BatchedDdddOcrBackend(use_gpu=True)
+```
+
+18-variants-beam latency, 300-image holdout (`scripts/benchmark.py --batched [--gpu]`):
+
+| Mode | CPU ms/img | GPU ms/img | Exact |
+|------|-----------:|-----------:|------:|
+| per-variant (default) | 184.1 | 347.3 | **85.0%** |
+| batched | **113.1** | 175.3 | 84.0% |
+
+The win is almost entirely from dropping the nested-list conversion and
+vectorizing the decode; the batched OCR call itself matters little on CPU.
+**CPU batched (113 ms) is the fastest configuration** and still beats every GPU
+mode — this workload is CPU-favorable. Trade-off: the dynamic-batch re-export
+selects slightly different onnxruntime kernels (~1e-2 logit drift), costing about
+**1 point of exact accuracy** (85.0% → 84.0%). Use the default per-variant path
+when you want the last accuracy point; use batched when latency matters more.
 
 ### Retry success rate
 
